@@ -1,0 +1,23 @@
+# ninja log v5
+2775	2940	1772788745128193988	/Users/oghenerukevwe/Game Portfolio/Unity/LightInDark/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1q6o1x31/obj/arm64-v8a/libgame.so	de292b03a0906469
+0	2774	1772788744957520524	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	1a9e48e2d3e20f4a
+2	2569	1772788744752846393	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	62bc6cd6cc4b2d46
+3	2310	1772788744486537904	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	72b6df8775a259d5
+1	2083	1772788744260752326	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	4e7eac7a2fafc0e0
+2	1976	1772788744153233510	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	2b1f8b6aac2af16b
+2	1966	1772788744143300735	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	b469ec113ef11c1c
+1	2181	1772788744356423836	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	f03ff92164004899
+362	708	1772788742858736238	/Users/oghenerukevwe/Game Portfolio/Unity/LightInDark/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1q6o1x31/obj/arm64-v8a/libswappywrapper.so	93fc207dde97fa13
+2	2077	1772788744254666338	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	79e4fc061d136909
+3	359	1772788742547869034	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	62ea328cbfceaaa8
+45	903	1772904555857534705	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	62ea328cbfceaaa8
+903	1476	1772904556393291854	/Users/oghenerukevwe/Game Portfolio/Unity/LightInDark/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1q6o1x31/obj/arm64-v8a/libswappywrapper.so	93fc207dde97fa13
+43	2270	1772904557218856358	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	b469ec113ef11c1c
+43	2276	1772904557225284767	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	2b1f8b6aac2af16b
+42	2346	1772904557284358091	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	4e7eac7a2fafc0e0
+44	2362	1772904557308503725	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	79e4fc061d136909
+43	2463	1772904557410470387	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	f03ff92164004899
+44	2560	1772904557509441095	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	72b6df8775a259d5
+43	2798	1772904557746868132	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	62bc6cd6cc4b2d46
+42	2941	1772904557891933872	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	1a9e48e2d3e20f4a
+2941	3075	1772904558031139014	/Users/oghenerukevwe/Game Portfolio/Unity/LightInDark/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1q6o1x31/obj/arm64-v8a/libgame.so	de292b03a0906469
