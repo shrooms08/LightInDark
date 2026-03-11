@@ -45,7 +45,7 @@ public class LightConeVisual : MonoBehaviour
         Material mat = new Material(Shader.Find("Sprites/Default"));
         mat.color = coneColor;
         meshRenderer.material = mat;
-        meshRenderer.sortingOrder = -1;
+        meshRenderer.sortingOrder = -5;
     }
 
     private void LateUpdate()

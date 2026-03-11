@@ -24,7 +24,7 @@ public class LightAffected : MonoBehaviour
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
     private int lightCount = 0;
-    private bool hasBeenLit = false;    // Once true, gravity never resets.
+    private bool hasBeenLit = false;    // Once true, gravity never resets → we use this to allow impact sounds
 
     // === UNITY LIFECYCLE ===
 
@@ -40,10 +40,14 @@ public class LightAffected : MonoBehaviour
     public void EnterLight()
     {
         lightCount++;
-        hasBeenLit = true;
 
-        // Gravity on permanently.
-        rb.gravityScale = litGravity;
+        if (lightCount == 1)   // First time lit
+        {
+            hasBeenLit = true;
+
+            // Gravity on permanently.
+            rb.gravityScale = litGravity;
+        }
 
         if (spriteRenderer != null)
         {
@@ -67,10 +71,48 @@ public class LightAffected : MonoBehaviour
             {
                 spriteRenderer.color = darkColor;
             }
-
-            // Gravity stays — object keeps falling.
-            // Do NOT reset gravityScale.
         }
+    }
+
+ 
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        Debug.Log($"[IMPACT] {gameObject.name} hit {collision.gameObject.name} | Tag: '{tag}' | Lit: {hasBeenLit} | Velocity: {collision.relativeVelocity.magnitude:F1}");
+
+        if (!hasBeenLit) 
+        {
+            Debug.LogWarning($"[NO SOUND] {gameObject.name} collided but not lit yet!");
+            return;
+        }
+
+        if (AudioManager.Instance == null)
+        {
+            Debug.LogError("[NO AUDIO] AudioManager missing!");
+            return;
+        }
+
+        string soundPlayed = "None";
+        if (CompareTag("Enemy"))
+        {
+            AudioManager.Instance.PlayEnemyFall();
+            soundPlayed = "EnemyFall";
+        }
+        else if (CompareTag("Platform"))
+        {
+            AudioManager.Instance.PlayPlatformFall();
+            soundPlayed = "PlatformFall";
+        }
+        else if (CompareTag("Spike"))
+        {
+            AudioManager.Instance.PlaySpikeFall();
+            soundPlayed = "SpikeFall";
+        }
+        else
+        {
+            Debug.LogWarning($"[NO MATCH] Tag '{tag}' on {gameObject.name} - add to script?");
+        }
+
+        Debug.Log($"[SOUND] Played {soundPlayed} on {gameObject.name}");
     }
 
     // === PRIVATE METHODS ===

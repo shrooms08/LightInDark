@@ -15,6 +15,8 @@ public class Goal : MonoBehaviour
             return;
         }
 
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayGoal();
+
         if (other.CompareTag("Player"))
         {
             hasBeenReached = true;

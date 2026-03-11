@@ -29,6 +29,7 @@ public class LightCone : MonoBehaviour
     private bool isActive = false;
     private HashSet<LightAffected> litObjects = new HashSet<LightAffected>();
     private HashSet<LightAffected> objectsInCone = new HashSet<LightAffected>();
+    private bool hasInitialized = false;
 
     // === UNITY LIFECYCLE ===
 
@@ -40,6 +41,7 @@ public class LightCone : MonoBehaviour
 
         UpdateConeShape();
         SetLightActive(false);
+        hasInitialized = true;
     }
 
     private void Update()
@@ -101,6 +103,8 @@ public class LightCone : MonoBehaviour
 
     // === PRIVATE METHODS ===
 
+    // ... (using statements same)
+
     private void SetLightActive(bool active)
     {
         isActive = active;
@@ -111,8 +115,15 @@ public class LightCone : MonoBehaviour
             meshRenderer.enabled = active;
         }
 
-        if (!active)
+        if (active)
         {
+            if (hasInitialized && AudioManager.Instance != null) AudioManager.Instance.PlayLightOn();
+        }
+        else
+        {
+            // NEW: Stop ongoing SFX (cuts LightOn instantly)
+            if (hasInitialized && AudioManager.Instance != null) AudioManager.Instance.StopSFX();
+
             // Release everything.
             foreach (LightAffected affected in litObjects)
             {
@@ -123,6 +134,9 @@ public class LightCone : MonoBehaviour
             }
             litObjects.Clear();
             objectsInCone.Clear();
+
+            // Play Off if assigned (null = silence)
+            if (hasInitialized && AudioManager.Instance != null) AudioManager.Instance.PlayLightOff();
         }
     }
 

@@ -23,6 +23,7 @@ public class PlayerController : MonoBehaviour
     private float moveInput;
     private bool isGrounded;
     private bool jumpRequested;
+    private bool wasGrounded;
 
     // === UNITY LIFECYCLE ===
 
@@ -39,6 +40,13 @@ public class PlayerController : MonoBehaviour
     private void FixedUpdate()
     {
         CheckGround();
+
+        if (!wasGrounded && isGrounded)
+        {
+            if (AudioManager.Instance != null) AudioManager.Instance.PlayLand();
+        }
+        wasGrounded = isGrounded;
+
         Move();
         Jump();
     }
@@ -103,6 +111,7 @@ public class PlayerController : MonoBehaviour
         if (jumpRequested && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+            if (AudioManager.Instance != null) AudioManager.Instance.PlayJump();
         }
 
         jumpRequested = false;

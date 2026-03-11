@@ -1,4 +1,4 @@
-using UnityEngine;
+ using UnityEngine;
 
 // Handles player death and respawning.
 //
@@ -43,6 +43,7 @@ public class PlayerHealth : MonoBehaviour
 
         rb.linearVelocity = Vector2.zero;
         playerController.enabled = false;
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayDeath();
 
         // Tell the HUD.
         if (hud != null)

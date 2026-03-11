@@ -14,6 +14,12 @@ public class Hazard : MonoBehaviour
         {
             if (other.TryGetComponent(out PlayerHealth health))
             {
+                // Play player death sound right when they die
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayDeath();
+                }
+
                 health.Die();
             }
             return;
@@ -31,9 +37,15 @@ public class Hazard : MonoBehaviour
             return;
         }
 
-        // Destroy any enemy or bullet.
+        // Destroy any enemy or bullet (anything with LightAffected).
         if (other.TryGetComponent(out LightAffected affected))
         {
+            // Play enemy kill sound before destroying it
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayEnemyKill();
+            }
+
             Destroy(other.gameObject);
         }
     }

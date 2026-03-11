@@ -119,5 +119,7 @@ public class Shooter : MonoBehaviour
         {
             bulletScript.Initialize(direction);
         }
+
+        if (AudioManager.Instance != null) AudioManager.Instance.PlayBulletFire();
     }
 }

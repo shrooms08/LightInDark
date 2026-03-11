@@ -59,6 +59,12 @@ public class Darkling : MonoBehaviour
             // Clean up if we've fallen too far below our start.
             if (destroyOnFall && transform.position.y < startPosition.y - fallDestroyDistance)
             {
+                // Play kill sound right before destruction
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayEnemyKill();
+                }
+
                 Destroy(gameObject);
             }
         }

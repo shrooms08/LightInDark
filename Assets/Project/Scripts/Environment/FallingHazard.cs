@@ -21,6 +21,12 @@ public class FallingHazard : MonoBehaviour
     [Tooltip("Which layers destroy this hazard when it touches them.")]
     [SerializeField] private LayerMask destroyLayers;
 
+    [Header("Sound")]  // ← NEW section
+    [Tooltip("Sound to play when the hazard hits and is destroyed")]
+    [SerializeField] private AudioClip impactSound;  // Drag spikeFallSound here in Inspector
+
+    [SerializeField] [Range(0f, 2f)] private float soundVolume = 1f;
+
     // === INTERNAL ===
 
     private Rigidbody2D rb;
@@ -79,6 +85,14 @@ public class FallingHazard : MonoBehaviour
 
         if (hit != null)
         {
+            // NEW: Play impact sound at exact position before destroy
+            if (impactSound != null)
+            {
+                AudioSource.PlayClipAtPoint(impactSound, transform.position, soundVolume);
+            }
+            // Optional debug to confirm in console
+            // Debug.Log(gameObject.name + " hit destroy layer → playing impact sound");
+
             Destroy(gameObject);
         }
     }
