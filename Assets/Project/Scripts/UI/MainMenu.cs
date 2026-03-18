@@ -9,18 +9,12 @@ using UnityEngine.SceneManagement;
 
 public class MainMenu : MonoBehaviour
 {
-    // === SETTINGS ===
-
     [Header("Panels")]
     [SerializeField] private GameObject titlePanel;
     [SerializeField] private GameObject speedrunPanel;
 
-    // === STATE ===
-
     public static bool IsCompetitiveMode { get; set; } = false;
     public static int SelectedLevel { get; set; } = 1;
-
-    // === UNITY LIFECYCLE ===
 
     private void Start()
     {
@@ -29,31 +23,31 @@ public class MainMenu : MonoBehaviour
 
     private void Update()
     {
-        // Keyboard shortcut for editor testing.
         if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return))
         {
             OnPlayButton();
         }
     }
 
-    // === BUTTON CALLBACKS ===
-
     public void OnPlayButton()
     {
-        // Free play — straight to Level_01, no wallet needed.
         IsCompetitiveMode = false;
         SelectedLevel = 1;
+        GameManager.DeathCount = 0;
         SceneManager.LoadScene("Level_01");
     }
 
     public void OnSpeedrunButton()
     {
-        // Show the speedrun panel with instructions.
+        IsCompetitiveMode = true;
+        SelectedLevel = 1;
+        GameManager.DeathCount = 0;
         ShowSpeedrunPanel();
     }
 
     public void OnBackButton()
     {
+        IsCompetitiveMode = false;
         ShowTitlePanel();
     }
 
@@ -61,8 +55,6 @@ public class MainMenu : MonoBehaviour
     {
         Application.Quit();
     }
-
-    // === PRIVATE METHODS ===
 
     private void ShowTitlePanel()
     {

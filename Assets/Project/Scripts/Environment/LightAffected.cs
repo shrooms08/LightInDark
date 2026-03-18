@@ -1,16 +1,12 @@
 using UnityEngine;
 
 // Put this on ANY object that should react to the player's light.
-// When in darkness: no gravity, floats in place, appears WHITE.
-// When lit: gravity turns on PERMANENTLY, appears BLACK.
-// When light turns off: stays falling (gravity stays), color returns to WHITE.
-//
-// Once an object has been lit, it never floats again.
+// Darkness: floats (no gravity) and appears WHITE.
+// Lit: gravity turns on permanently and appears BLACK.
+// When light turns off: gravity stays but color returns to WHITE.
 
 public class LightAffected : MonoBehaviour
 {
-    // === SETTINGS ===
-
     [Header("Gravity")]
     [SerializeField] private float litGravity = 1f;
     [SerializeField] private float darkGravity = 0f;
@@ -19,39 +15,51 @@ public class LightAffected : MonoBehaviour
     [SerializeField] private Color litColor = Color.black;
     [SerializeField] private Color darkColor = Color.white;
 
-    // === INTERNAL ===
+    [Header("Particles")]
+    [SerializeField] private ParticleSystem lightParticles;
+
+    [Header("Impact")]
+    [SerializeField] private float impactSoundThreshold = 3f;
 
     private Rigidbody2D rb;
     private SpriteRenderer spriteRenderer;
-    private int lightCount = 0;
-    private bool hasBeenLit = false;    // Once true, gravity never resets → we use this to allow impact sounds
 
-    // === UNITY LIFECYCLE ===
+    private int lightCount = 0;
+    private bool hasBeenLit = false;
 
     private void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+
         ApplyDarkState();
     }
-
-    // === PUBLIC METHODS ===
 
     public void EnterLight()
     {
         lightCount++;
 
-        if (lightCount == 1)   // First time lit
+        if (lightCount == 1)
         {
-            hasBeenLit = true;
+            if (!hasBeenLit)
+            {
+                hasBeenLit = true;
 
-            // Gravity on permanently.
-            rb.gravityScale = litGravity;
-        }
+                if (rb != null)
+                {
+                    rb.gravityScale = litGravity;
+                }
 
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.color = litColor;
+                if (lightParticles != null)
+                {
+                    lightParticles.Play();
+                }
+            }
+
+            if (spriteRenderer != null)
+            {
+                spriteRenderer.color = litColor;
+            }
         }
     }
 
@@ -66,7 +74,6 @@ public class LightAffected : MonoBehaviour
 
         if (lightCount == 0)
         {
-            // Color reverts to white, but gravity stays on.
             if (spriteRenderer != null)
             {
                 spriteRenderer.color = darkColor;
@@ -74,52 +81,43 @@ public class LightAffected : MonoBehaviour
         }
     }
 
- 
     private void OnCollisionEnter2D(Collision2D collision)
     {
-        Debug.Log($"[IMPACT] {gameObject.name} hit {collision.gameObject.name} | Tag: '{tag}' | Lit: {hasBeenLit} | Velocity: {collision.relativeVelocity.magnitude:F1}");
-
-        if (!hasBeenLit) 
+        if (!hasBeenLit)
         {
-            Debug.LogWarning($"[NO SOUND] {gameObject.name} collided but not lit yet!");
+            return;
+        }
+
+        if (collision.relativeVelocity.magnitude < impactSoundThreshold)
+        {
             return;
         }
 
         if (AudioManager.Instance == null)
         {
-            Debug.LogError("[NO AUDIO] AudioManager missing!");
             return;
         }
 
-        string soundPlayed = "None";
         if (CompareTag("Enemy"))
         {
             AudioManager.Instance.PlayEnemyFall();
-            soundPlayed = "EnemyFall";
         }
         else if (CompareTag("Platform"))
         {
             AudioManager.Instance.PlayPlatformFall();
-            soundPlayed = "PlatformFall";
         }
         else if (CompareTag("Spike"))
         {
             AudioManager.Instance.PlaySpikeFall();
-            soundPlayed = "SpikeFall";
         }
-        else
-        {
-            Debug.LogWarning($"[NO MATCH] Tag '{tag}' on {gameObject.name} - add to script?");
-        }
-
-        Debug.Log($"[SOUND] Played {soundPlayed} on {gameObject.name}");
     }
-
-    // === PRIVATE METHODS ===
 
     private void ApplyDarkState()
     {
-        rb.gravityScale = darkGravity;
+        if (rb != null)
+        {
+            rb.gravityScale = darkGravity;
+        }
 
         if (spriteRenderer != null)
         {

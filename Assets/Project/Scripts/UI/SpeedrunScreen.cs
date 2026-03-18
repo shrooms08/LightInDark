@@ -1,244 +1,345 @@
+using System;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using TMPro;
 
-// The Speedrun screen flow:
-// 1. Shows instructions on how speedrun works
-// 2. Player taps "Connect Wallet" → wallet connects via MWA
-// 3. On successful connect → auto-stakes entry fee (0.01 SOL)
-// 4. On successful stake → countdown timer starts (5 seconds)
-// 5. When countdown hits 0 → loads the speedrun level
-//
-// Attach to the SpeedrunPanel or a child object inside it.
-
 public class SpeedrunScreen : MonoBehaviour
 {
-    // === SETTINGS ===
+    [Header("Panels")]
+    [SerializeField] private GameObject instructionGroup;
+    [SerializeField] private GameObject runPanel;
 
-    [Header("UI References")]
-    [SerializeField] private GameObject instructionGroup;      // Instructions text + connect button
-    [SerializeField] private GameObject stakingGroup;           // "Staking..." status text
-    [SerializeField] private GameObject countdownGroup;         // Countdown timer display
-    [SerializeField] private TextMeshProUGUI instructionText;   // How speedrun works
-    [SerializeField] private TextMeshProUGUI connectButtonText; // "CONNECT WALLET" / wallet address
-    [SerializeField] private TextMeshProUGUI statusText;        // "Connecting..." / "Staking..." / "Staked!"
-    [SerializeField] private TextMeshProUGUI countdownText;     // "3... 2... 1... GO!"
-    [SerializeField] private TextMeshProUGUI walletAddressText; // Shows connected address
+    [Header("UI")]
+    [SerializeField] private TextMeshProUGUI instructionText;
+    [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private TextMeshProUGUI walletAddressText;
+    [SerializeField] private TextMeshProUGUI registrationCountdownText;
+    [SerializeField] private TextMeshProUGUI countdownText;
+
+    [Header("Buttons")]
+    [SerializeField] private GameObject connectButton;
+    [SerializeField] private GameObject checkWalletButton;
+    [SerializeField] private GameObject stakeButton;
+    [SerializeField] private GameObject startRunButton;
+    [SerializeField] private GameObject disconnectWalletButton;
 
     [Header("Settings")]
     [SerializeField] private float countdownDuration = 5f;
-    [SerializeField] private int speedrunLevelId = 1;
-    [SerializeField] private string speedrunLevelName = "Level_01";
+    [SerializeField] private uint seasonId = 0;
+    [SerializeField] private int levelId = 1;
+    [SerializeField] private string levelSceneName = "Level_01";
+    [SerializeField] private string registrationEndIsoUtc = "2026-03-19T23:59:59Z";
 
-    // === STATE ===
-
-    private bool isCountingDown = false;
-    private float countdownTimer = 0f;
     private bool isProcessing = false;
-
-    // === UNITY LIFECYCLE ===
+    private bool isCountingDown = false;
+    private float countdownTimer;
+    private DateTime registrationEndUtc;
 
     private void OnEnable()
     {
-        // Reset to instruction state every time panel opens.
+        registrationEndUtc = DateTime.Parse(
+            registrationEndIsoUtc,
+            null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal |
+            System.Globalization.DateTimeStyles.AssumeUniversal
+        );
+
         ShowInstructions();
+        RefreshWalletUI();
+        ResetButtonsFromWalletState();
     }
 
     private void Update()
     {
-        if (!isCountingDown)
-        {
-            return;
-        }
+        UpdateRegistrationCountdown();
+
+        if (!isCountingDown) return;
 
         countdownTimer -= Time.deltaTime;
 
         if (countdownTimer <= 0f)
         {
-            // GO! Launch the level.
             isCountingDown = false;
             LaunchSpeedrun();
         }
-        else
+        else if (countdownText != null)
         {
-            // Update countdown display.
-            int seconds = Mathf.CeilToInt(countdownTimer);
-            if (countdownText != null)
-            {
-                if (seconds > 0)
-                {
-                    countdownText.text = seconds.ToString();
-                }
-                else
-                {
-                    countdownText.text = "GO!";
-                }
-            }
+            countdownText.text = Mathf.CeilToInt(countdownTimer).ToString();
         }
     }
 
-    // === BUTTON CALLBACKS ===
-
     public async void OnConnectWalletButton()
     {
-        if (isProcessing)
-        {
-            return;
-        }
-
-        // If already connected, go straight to staking.
-        if (SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected())
-        {
-            await StakeAndStartCountdown();
-            return;
-        }
-
+        if (isProcessing) return;
         isProcessing = true;
 
-        // Show connecting status.
-        if (statusText != null)
-        {
-            statusText.text = "Connecting wallet...";
-            statusText.gameObject.SetActive(true);
-        }
-        if (connectButtonText != null)
-        {
-            connectButtonText.text = "CONNECTING...";
-        }
+        SetStatus("Connecting wallet...");
 
-        // Attempt wallet connection.
-        if (SolanaManager.Instance == null)
+        bool connected = await WaitForWalletConnection(6f);
+
+        if (!connected)
         {
-            Debug.LogWarning("[SpeedrunScreen] SolanaManager not found.");
-            if (statusText != null) statusText.text = "Wallet service not available.";
-            if (connectButtonText != null) connectButtonText.text = "CONNECT WALLET";
+            SetStatus("Wallet connection failed.");
+            RefreshWalletUI();
+            ResetButtonsFromWalletState();
             isProcessing = false;
             return;
         }
 
-        string pubkey = await SolanaManager.Instance.ConnectWallet();
+        RefreshWalletUI();
 
-        if (pubkey == null)
+        HideAllActionButtons();
+
+        if (connectButton != null) connectButton.SetActive(false);
+        if (checkWalletButton != null) checkWalletButton.SetActive(true);
+        if (disconnectWalletButton != null) disconnectWalletButton.SetActive(true);
+
+        SetStatus("Wallet connected.");
+        isProcessing = false;
+    }
+
+    public void OnDisconnectWalletButton()
+    {
+        Debug.Log("[SpeedrunScreen] Wallet disconnected");
+
+        if (runPanel != null)
+            runPanel.SetActive(false);
+
+        if (instructionGroup != null)
+            instructionGroup.SetActive(true);
+
+        RefreshWalletUI();
+        ResetButtonsFromWalletState();
+        SetStatus("Wallet disconnected.");
+    }
+
+    public async void OnCheckWalletButton()
+    {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        if (SolanaManager.Instance == null || !SolanaManager.Instance.IsWalletConnected())
         {
-            // Connection failed or cancelled.
-            if (statusText != null) statusText.text = "Connection failed. Try again.";
-            if (connectButtonText != null) connectButtonText.text = "CONNECT WALLET";
+            SetStatus("Connect wallet first.");
+            RefreshWalletUI();
+            ResetButtonsFromWalletState();
             isProcessing = false;
             return;
         }
 
-        // Connection successful — show address.
-        string displayAddress = SolanaManager.Instance.GetWalletAddress();
-        if (walletAddressText != null)
-        {
-            walletAddressText.text = displayAddress;
-            walletAddressText.gameObject.SetActive(true);
-        }
-        if (connectButtonText != null)
-        {
-            connectButtonText.text = displayAddress;
-        }
+        SetStatus("Checking wallet...");
 
-        // Auto-stake and start countdown.
-        await StakeAndStartCountdown();
+        bool alreadyEligible = await SolanaManager.Instance.IsEligibleForSeason(seasonId);
+
+        HideAllActionButtons();
+
+        if (disconnectWalletButton != null)
+            disconnectWalletButton.SetActive(true);
+
+        if (alreadyEligible)
+        {
+            ShowRunPanel();
+            SetStatus("Already eligible.");
+        }
+        else
+        {
+            if (stakeButton != null) stakeButton.SetActive(true);
+            SetStatus("Wallet checked. Stake required to enter.");
+        }
 
         isProcessing = false;
     }
 
-    // === PRIVATE METHODS ===
-
-    private async System.Threading.Tasks.Task StakeAndStartCountdown()
+    public async void OnStakeButton()
     {
-        // Show staking status.
-        ShowStaking();
+        if (isProcessing) return;
+        isProcessing = true;
 
-        if (statusText != null)
+        if (SolanaManager.Instance == null || !SolanaManager.Instance.IsWalletConnected())
         {
-            statusText.text = "Staking 0.01 SOL...";
-        }
-
-        // Enter competitive run (pays entry fee).
-        bool stakeSuccess = false;
-
-        if (SolanaManager.Instance != null)
-        {
-            stakeSuccess = await SolanaManager.Instance.EnterCompetitiveRun(speedrunLevelId);
-        }
-
-        if (!stakeSuccess)
-        {
-            if (statusText != null)
-            {
-                statusText.text = "Staking failed. Check SOL balance.";
-            }
-            // Go back to instructions after a moment.
-            Invoke(nameof(ShowInstructions), 2f);
+            SetStatus("Connect wallet first.");
+            ResetButtonsFromWalletState();
+            isProcessing = false;
             return;
         }
 
-        // Stake successful — show countdown.
-        if (statusText != null)
+        Debug.Log("[SpeedrunScreen] Stake button pressed.");
+        Debug.Log("[SpeedrunScreen] Wallet: " + SolanaManager.Instance.GetWalletAddress());
+
+        SetStatus("Staking 100 LID...");
+
+        bool ok = await SolanaManager.Instance.StakeLIDForSeason(seasonId, 100_000_000UL);
+
+        Debug.Log("[SpeedrunScreen] Stake result: " + ok);
+
+        if (!ok)
         {
-            statusText.text = "Staked! Get ready...";
+            SetStatus("Stake failed.");
+            HideAllActionButtons();
+
+            if (checkWalletButton != null) checkWalletButton.SetActive(true);
+            if (disconnectWalletButton != null) disconnectWalletButton.SetActive(true);
+
+            isProcessing = false;
+            return;
         }
 
+        SetStatus("Stake successful.");
+        ShowRunPanel();
+        isProcessing = false;
+    }
+
+    public async void OnStartRunButton()
+    {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        if (!IsRegistrationClosed())
+        {
+            SetStatus("Registration is still open.");
+            isProcessing = false;
+            return;
+        }
+
+        SetStatus("Starting run...");
+
+        bool ok = await SolanaManager.Instance.StartCompetitiveRun(seasonId, levelId);
+
+        if (!ok)
+        {
+            SetStatus("Run start failed.");
+            ShowRunPanel();
+            isProcessing = false;
+            return;
+        }
+
+        SetStatus("Run started.");
         StartCountdown();
+        isProcessing = false;
+    }
+
+    private async Task<bool> WaitForWalletConnection(float timeoutSeconds)
+    {
+        float elapsed = 0f;
+
+        while (elapsed < timeoutSeconds)
+        {
+            if (SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected())
+            {
+                return true;
+            }
+
+            await Task.Delay(250);
+            elapsed += 0.25f;
+        }
+
+        return false;
+    }
+
+    private void RefreshWalletUI()
+    {
+        bool connected = SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected();
+
+        if (walletAddressText != null)
+        {
+            walletAddressText.text = connected
+                ? SolanaManager.Instance.GetWalletAddress()
+                : "Not connected";
+        }
+    }
+
+    private void ResetButtonsFromWalletState()
+    {
+        bool connected = SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected();
+
+        HideAllActionButtons();
+
+        if (connectButton != null) connectButton.SetActive(!connected);
+        if (checkWalletButton != null) checkWalletButton.SetActive(connected);
+        if (disconnectWalletButton != null) disconnectWalletButton.SetActive(connected);
+
+        if (!connected)
+        {
+            if (runPanel != null) runPanel.SetActive(false);
+            if (instructionGroup != null) instructionGroup.SetActive(true);
+        }
+    }
+
+    private void HideAllActionButtons()
+    {
+        if (connectButton != null) connectButton.SetActive(false);
+        if (checkWalletButton != null) checkWalletButton.SetActive(false);
+        if (stakeButton != null) stakeButton.SetActive(false);
+        if (startRunButton != null) startRunButton.SetActive(false);
+        if (disconnectWalletButton != null) disconnectWalletButton.SetActive(false);
     }
 
     private void ShowInstructions()
     {
         if (instructionGroup != null) instructionGroup.SetActive(true);
-        if (stakingGroup != null) stakingGroup.SetActive(false);
-        if (countdownGroup != null) countdownGroup.SetActive(false);
+        if (runPanel != null) runPanel.SetActive(false);
 
         if (instructionText != null)
         {
             instructionText.text =
                 "SPEEDRUN MODE\n\n" +
-                "Compete for the fastest time.\n" +
-                "Your run is recorded on-chain.\n\n" +
-                "Entry fee: 1000 SKR\n" +
-                "Top 3 players win the prize pool.\n\n" +
-                "Connect your wallet to begin.";
+                "Connect wallet.\n" +
+                "Check wallet.\n" +
+                "Stake 100 LID.\n" +
+                "After registration closes, start your run.";
         }
+    }
 
-        if (connectButtonText != null)
+    private void ShowRunPanel()
+    {
+        if (instructionGroup != null) instructionGroup.SetActive(false);
+        if (runPanel != null) runPanel.SetActive(true);
+
+        UpdateRunPanelState();
+    }
+
+    private void UpdateRunPanelState()
+    {
+        bool closed = IsRegistrationClosed();
+
+        if (registrationCountdownText != null)
         {
-            if (SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected())
+            if (closed)
             {
-                connectButtonText.text = SolanaManager.Instance.GetWalletAddress();
+                registrationCountdownText.text = "Registration closed. You can start your run.";
             }
             else
             {
-                connectButtonText.text = "CONNECT WALLET";
+                TimeSpan remaining = registrationEndUtc - DateTime.UtcNow;
+                if (remaining.TotalSeconds < 0) remaining = TimeSpan.Zero;
+
+                registrationCountdownText.text =
+                    $"Registration closes in: {remaining.Days:D2}d {remaining.Hours:D2}h {remaining.Minutes:D2}m {remaining.Seconds:D2}s";
             }
         }
 
-        if (statusText != null) statusText.gameObject.SetActive(false);
-        if (walletAddressText != null) walletAddressText.gameObject.SetActive(false);
-
-        isCountingDown = false;
-        isProcessing = false;
+        if (startRunButton != null)
+        {
+            startRunButton.SetActive(closed);
+        }
     }
 
-    private void ShowStaking()
+    private void UpdateRegistrationCountdown()
     {
-        if (instructionGroup != null) instructionGroup.SetActive(false);
-        if (stakingGroup != null) stakingGroup.SetActive(true);
-        if (countdownGroup != null) countdownGroup.SetActive(false);
-
-        if (statusText != null)
+        if (runPanel != null && runPanel.activeSelf)
         {
-            statusText.gameObject.SetActive(true);
+            UpdateRunPanelState();
         }
+    }
+
+    private bool IsRegistrationClosed()
+    {
+        return DateTime.UtcNow >= registrationEndUtc;
     }
 
     private void StartCountdown()
     {
-        if (instructionGroup != null) instructionGroup.SetActive(false);
-        if (stakingGroup != null) stakingGroup.SetActive(false);
-        if (countdownGroup != null) countdownGroup.SetActive(true);
-
         countdownTimer = countdownDuration;
         isCountingDown = true;
 
@@ -251,7 +352,17 @@ public class SpeedrunScreen : MonoBehaviour
     private void LaunchSpeedrun()
     {
         MainMenu.IsCompetitiveMode = true;
-        MainMenu.SelectedLevel = speedrunLevelId;
-        SceneManager.LoadScene(speedrunLevelName);
+        MainMenu.SelectedLevel = levelId;
+        GameManager.DeathCount = 0;
+        SceneManager.LoadScene(levelSceneName);
+    }
+
+    private void SetStatus(string msg)
+    {
+        if (statusText != null)
+        {
+            statusText.gameObject.SetActive(true);
+            statusText.text = msg;
+        }
     }
 }

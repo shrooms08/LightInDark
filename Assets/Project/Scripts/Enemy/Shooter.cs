@@ -1,40 +1,39 @@
 using UnityEngine;
+using System.Collections;
 
-// A floating enemy that shoots bullets toward the player at intervals.
-// In darkness: floats in place, fires bullets.
-// In light: gains gravity and falls (stops shooting).
-//
-// Requires: Rigidbody2D, Collider2D, SpriteRenderer, LightAffected.
+// A floating enemy that shoots bullets toward the player.
+// In darkness: floats and shoots.
+// In light: gains gravity and falls.
+// Only Hazards kill it.
 
 public class Shooter : MonoBehaviour
 {
-    // === SETTINGS ===
-
     [Header("Shooting")]
-    [SerializeField] private GameObject bulletPrefab;      // The bullet to spawn
-    [SerializeField] private float fireRate = 2f;          // Seconds between shots
-    [SerializeField] private float detectionRange = 10f;   // Only shoot when player is within range
+    [SerializeField] private GameObject bulletPrefab;
+    [SerializeField] private float fireRate = 2f;
+    [SerializeField] private float detectionRange = 10f;
 
-    [Header("Behavior")]
-    [SerializeField] private bool destroyOnFall = true;
-    [SerializeField] private float fallDestroyDistance = 15f;
+    [Header("Death")]
+    [SerializeField] private float deathDelay = 2f;
+    [SerializeField] private ParticleSystem deathParticles;
 
-    // === INTERNAL ===
-
-    private Vector3 startPosition;
     private Rigidbody2D rb;
-    private float fireTimer;
+    private Animator animator;
+    private Collider2D enemyCollider;
     private Transform playerTransform;
 
-    // === UNITY LIFECYCLE ===
+    private float fireTimer;
+    private bool isDead = false;
+    private bool deathStarted = false;
 
     private void Start()
     {
-        startPosition = transform.position;
         rb = GetComponent<Rigidbody2D>();
-        fireTimer = fireRate;    // Ready to fire immediately after first interval.
+        animator = GetComponent<Animator>();
+        enemyCollider = GetComponent<Collider2D>();
 
-        // Find the player in the scene.
+        fireTimer = fireRate;
+
         GameObject player = GameObject.FindGameObjectWithTag("Player");
         if (player != null)
         {
@@ -44,7 +43,11 @@ public class Shooter : MonoBehaviour
 
     private void Update()
     {
-        // Only shoot when in darkness (floating, no gravity).
+        if (isDead)
+        {
+            return;
+        }
+
         if (rb.gravityScale == 0f)
         {
             fireTimer -= Time.deltaTime;
@@ -55,17 +58,16 @@ public class Shooter : MonoBehaviour
                 fireTimer = fireRate;
             }
         }
-
-        // Clean up if fallen too far.
-        if (destroyOnFall && transform.position.y < startPosition.y - fallDestroyDistance)
+        else
         {
-            Destroy(gameObject);
+            // Light = fall only
         }
     }
 
-    // Kills the player on contact.
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if (isDead) return;
+
         if (other.CompareTag("Player"))
         {
             if (other.TryGetComponent(out PlayerHealth health))
@@ -77,6 +79,8 @@ public class Shooter : MonoBehaviour
 
     private void OnCollisionEnter2D(Collision2D collision)
     {
+        if (isDead) return;
+
         if (collision.gameObject.CompareTag("Player"))
         {
             if (collision.gameObject.TryGetComponent(out PlayerHealth health))
@@ -85,8 +89,6 @@ public class Shooter : MonoBehaviour
             }
         }
     }
-
-    // === PRIVATE METHODS ===
 
     private bool PlayerInRange()
     {
@@ -106,20 +108,63 @@ public class Shooter : MonoBehaviour
             return;
         }
 
-        // Calculate direction toward the player.
         Vector2 direction = (playerTransform.position - transform.position).normalized;
-
-        // Spawn the bullet slightly in front of the shooter.
         Vector3 spawnPosition = transform.position + (Vector3)(direction * 0.5f);
+
         GameObject bullet = Instantiate(bulletPrefab, spawnPosition, Quaternion.identity);
 
-        // Initialize the bullet with its travel direction.
         EnemyBullet bulletScript = bullet.GetComponent<EnemyBullet>();
         if (bulletScript != null)
         {
             bulletScript.Initialize(direction);
         }
 
-        if (AudioManager.Instance != null) AudioManager.Instance.PlayBulletFire();
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayBulletFire();
+        }
+    }
+
+    public void Die()
+    {
+        if (deathStarted) return;
+
+        deathStarted = true;
+        isDead = true;
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayEnemyKill();
+        }
+
+        if (animator != null)
+        {
+            animator.SetBool("Dead", true);
+        }
+
+        if (deathParticles != null)
+        {
+            deathParticles.transform.parent = null;
+            deathParticles.Play();
+            Destroy(deathParticles.gameObject, 2f);
+        }
+
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+
+        if (enemyCollider != null)
+        {
+            enemyCollider.enabled = false;
+        }
+
+        StartCoroutine(DeathRoutine());
+    }
+
+    private IEnumerator DeathRoutine()
+    {
+        yield return new WaitForSeconds(deathDelay);
+        Destroy(gameObject);
     }
 }

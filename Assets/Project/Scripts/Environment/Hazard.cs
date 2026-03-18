@@ -3,7 +3,6 @@ using UnityEngine;
 // Kills anything on contact: player, enemies, bullets.
 // Does NOT affect LightPlatforms.
 // Attach to spikes, kill floors, any lethal surface.
-// Requires: Collider2D set as Trigger.
 
 public class Hazard : MonoBehaviour
 {
@@ -14,12 +13,6 @@ public class Hazard : MonoBehaviour
         {
             if (other.TryGetComponent(out PlayerHealth health))
             {
-                // Play player death sound right when they die
-                if (AudioManager.Instance != null)
-                {
-                    AudioManager.Instance.PlayDeath();
-                }
-
                 health.Die();
             }
             return;
@@ -37,15 +30,28 @@ public class Hazard : MonoBehaviour
             return;
         }
 
-        // Destroy any enemy or bullet (anything with LightAffected).
+        // Kill enemies through their own death flow.
+        if (other.TryGetComponent(out Darkling darkling))
+        {
+            darkling.Die();
+            return;
+        }
+
+        if (other.TryGetComponent(out Shooter shooter))
+        {
+            shooter.Die();
+            return;
+        }
+
+        if (other.TryGetComponent(out Chaser chaser))
+        {
+            chaser.Die();
+            return;
+        }
+
+        // Destroy bullets or other light-affected objects.
         if (other.TryGetComponent(out LightAffected affected))
         {
-            // Play enemy kill sound before destroying it
-            if (AudioManager.Instance != null)
-            {
-                AudioManager.Instance.PlayEnemyKill();
-            }
-
             Destroy(other.gameObject);
         }
     }

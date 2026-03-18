@@ -2,79 +2,110 @@ using UnityEngine;
 
 // Controls player movement and jumping.
 // Reads from keyboard (editor) and TouchControls (mobile).
-// Attach this to the Player object.
 
 public class PlayerController : MonoBehaviour
 {
-    // === SETTINGS ===
-
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 5f;
 
     [Header("Jumping")]
     [SerializeField] private float jumpForce = 10f;
     [SerializeField] private Transform groundCheck;
-    [SerializeField] private float groundCheckRadius = 0.1f;
+    [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
-    // === INTERNAL ===
+    [Header("Particles")]
+    [SerializeField] private ParticleSystem landingDust;
+    [SerializeField] private ParticleSystem deathBurst;
 
     private Rigidbody2D rb;
+    private Animator animator;
+    private SpriteRenderer spriteRenderer;
+
     private float moveInput;
     private bool isGrounded;
     private bool jumpRequested;
     private bool wasGrounded;
-
-    // === UNITY LIFECYCLE ===
+    private bool isDead;
 
     private void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     private void Update()
     {
-        ReadInput();
+        if (!isDead)
+        {
+            ReadInput();
+            FlipSprite();
+        }
+
+        UpdateAnimator();
     }
 
     private void FixedUpdate()
     {
         CheckGround();
 
-        if (!wasGrounded && isGrounded)
+        if (!isDead)
         {
-            if (AudioManager.Instance != null) AudioManager.Instance.PlayLand();
+            if (!wasGrounded && isGrounded)
+            {
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayLand();
+                }
+
+                if (landingDust != null)
+                {
+                    landingDust.Play();
+                }
+            }
+
+            Move();
+            Jump();
         }
+
         wasGrounded = isGrounded;
-
-        Move();
-        Jump();
+        UpdateAnimator();
     }
 
-    // === PUBLIC METHODS ===
-
-    public void SetMoveSpeed(float newSpeed)
+    public void Die()
     {
-        moveSpeed = newSpeed;
-    }
+        if (isDead) return;
 
-    // === PRIVATE METHODS ===
+        isDead = true;
+        moveInput = 0f;
+        jumpRequested = false;
+
+        // Stop horizontal movement but allow gravity to keep pulling player down.
+        rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+
+        if (animator != null)
+        {
+            animator.SetBool("Dead", true);
+        }
+
+        if (deathBurst != null)
+        {
+            deathBurst.Play();
+        }
+    }
 
     private void ReadInput()
     {
-        // Read keyboard input.
         moveInput = Input.GetAxisRaw("Horizontal");
 
         bool keyboardJump = Input.GetButtonDown("Jump");
 
-        // If touch controls exist, layer them on top.
-        // Touch overrides keyboard if touch is giving input.
         if (TouchControls.Instance != null)
         {
             float touchMove = TouchControls.Instance.MoveInput;
             bool touchJump = TouchControls.Instance.JumpPressed;
 
-            // Use touch input if it's active, otherwise keep keyboard.
             if (touchMove != 0f)
             {
                 moveInput = touchMove;
@@ -92,15 +123,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void CheckGround()
-    {
-        isGrounded = Physics2D.OverlapCircle(
-            groundCheck.position,
-            groundCheckRadius,
-            groundLayer
-        );
-    }
-
     private void Move()
     {
         rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
@@ -111,9 +133,50 @@ public class PlayerController : MonoBehaviour
         if (jumpRequested && isGrounded)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
-            if (AudioManager.Instance != null) AudioManager.Instance.PlayJump();
+
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayJump();
+            }
         }
 
         jumpRequested = false;
+    }
+
+    private void CheckGround()
+    {
+        isGrounded = Physics2D.OverlapCircle(
+            groundCheck.position,
+            groundCheckRadius,
+            groundLayer
+        );
+    }
+
+    private void FlipSprite()
+    {
+        if (spriteRenderer == null) return;
+
+        if (moveInput > 0.01f)
+            spriteRenderer.flipX = false;
+        else if (moveInput < -0.01f)
+            spriteRenderer.flipX = true;
+    }
+
+    private void UpdateAnimator()
+    {
+        if (animator == null || rb == null) return;
+
+        animator.SetFloat("Speed", Mathf.Abs(moveInput));
+        animator.SetBool("IsGrounded", isGrounded);
+        animator.SetFloat("VerticalVelocity", rb.linearVelocity.y);
+        animator.SetBool("Dead", isDead);
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (groundCheck == null) return;
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
     }
 }

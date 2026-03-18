@@ -1,78 +1,77 @@
 using UnityEngine;
+using System.Collections;
 
 // The basic enemy of LightInDark.
-// In DARKNESS: floats and patrols back and forth horizontally.
-// In LIGHT: gains gravity and falls — the player's weapon against them.
-// Kills the player on contact regardless of state.
-//
-// Requires on this object: Rigidbody2D, Collider2D, SpriteRenderer, LightAffected.
-// The LightAffected component handles the gravity switching.
-// This script handles patrol movement and player damage.
+// In DARKNESS: floats and patrols horizontally.
+// In LIGHT: gains gravity and falls, but keeps patrolling on ground.
+// Only Hazards kill it.
 
 public class Darkling : MonoBehaviour
 {
-    // === SETTINGS ===
-
     [Header("Patrol")]
-    [SerializeField] private float patrolSpeed = 1.5f;      // How fast it moves while floating
-    [SerializeField] private float patrolRange = 3f;         // How far it patrols from its start position
+    [SerializeField] private float patrolSpeed = 1.5f;
+    [SerializeField] private float patrolRange = 3f;
 
-    [Header("Behavior")]
-    [SerializeField] private bool destroyOnFall = true;      // If true, destroy after falling a certain distance
-    [SerializeField] private float fallDestroyDistance = 15f; // How far below start before it's destroyed
+    [Header("Death")]
+    [SerializeField] private float deathDelay = 2f;
+    [SerializeField] private ParticleSystem deathParticles;
 
-    // === INTERNAL ===
+    private Vector3 startPosition;
+    private float patrolDirection = 1f;
 
-    private Vector3 startPosition;       // Where this enemy was placed in the editor
-    private float patrolDirection = 1f;  // 1 = right, -1 = left
-    private LightAffected lightAffected;
     private Rigidbody2D rb;
-    private bool isFalling = false;
+    private Animator animator;
+    private Collider2D enemyCollider;
+    private SpriteRenderer spriteRenderer;
 
-    // === UNITY LIFECYCLE ===
+    private bool isDead = false;
+    private bool deathStarted = false;
 
     private void Start()
     {
         startPosition = transform.position;
-        lightAffected = GetComponent<LightAffected>();
         rb = GetComponent<Rigidbody2D>();
+        animator = GetComponent<Animator>();
+        enemyCollider = GetComponent<Collider2D>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     private void Update()
     {
-        // Check if we're currently lit (has gravity) or in darkness (floating).
-        // We check gravity scale directly — if it's 0, we're in darkness.
-        if (rb.gravityScale == 0f)
+        if (isDead)
         {
-            Patrol();
-            isFalling = false;
+            return;
         }
-        else
+
+        Patrol();
+    }
+
+    private void Patrol()
+    {
+        Vector3 movement = Vector3.right * patrolDirection * patrolSpeed * Time.deltaTime;
+        transform.position += movement;
+
+        if (spriteRenderer != null)
         {
-            StopPatrol();
+            spriteRenderer.flipX = patrolDirection < 0f;
+        }
 
-            if (!isFalling)
-            {
-                isFalling = true;
-            }
+        float distanceFromStart = transform.position.x - startPosition.x;
 
-            // Clean up if we've fallen too far below our start.
-            if (destroyOnFall && transform.position.y < startPosition.y - fallDestroyDistance)
-            {
-                // Play kill sound right before destruction
-                if (AudioManager.Instance != null)
-                {
-                    AudioManager.Instance.PlayEnemyKill();
-                }
-
-                Destroy(gameObject);
-            }
+        if (distanceFromStart > patrolRange)
+        {
+            patrolDirection = -1f;
+        }
+        else if (distanceFromStart < -patrolRange)
+        {
+            patrolDirection = 1f;
         }
     }
 
-    // Kills the player on contact.
     private void OnTriggerEnter2D(Collider2D other)
     {
+        if (isDead) return;
+
         if (other.CompareTag("Player"))
         {
             if (other.TryGetComponent(out PlayerHealth health))
@@ -82,9 +81,10 @@ public class Darkling : MonoBehaviour
         }
     }
 
-    // Also check for non-trigger collisions (in case collider isn't a trigger).
     private void OnCollisionEnter2D(Collision2D collision)
     {
+        if (isDead) return;
+
         if (collision.gameObject.CompareTag("Player"))
         {
             if (collision.gameObject.TryGetComponent(out PlayerHealth health))
@@ -94,32 +94,46 @@ public class Darkling : MonoBehaviour
         }
     }
 
-    // === PRIVATE METHODS ===
-
-    // Moves back and forth horizontally within patrol range.
-    private void Patrol()
+    public void Die()
     {
-        // Move in the current direction.
-        Vector3 movement = Vector3.right * patrolDirection * patrolSpeed * Time.deltaTime;
-        transform.position += movement;
+        if (deathStarted) return;
 
-        // If we've gone too far from start, reverse direction.
-        float distanceFromStart = transform.position.x - startPosition.x;
+        deathStarted = true;
+        isDead = true;
 
-        if (distanceFromStart > patrolRange)
+        if (AudioManager.Instance != null)
         {
-            patrolDirection = -1f;   // Turn left
+            AudioManager.Instance.PlayEnemyKill();
         }
-        else if (distanceFromStart < -patrolRange)
+
+        if (animator != null)
         {
-            patrolDirection = 1f;    // Turn right
+            animator.SetBool("Dead", true);
         }
+
+        if (deathParticles != null)
+        {
+            deathParticles.transform.parent = null;
+            deathParticles.Play();
+            Destroy(deathParticles.gameObject, 2f);
+        }
+
+        if (rb != null)
+        {
+            rb.linearVelocity = new Vector2(0f, rb.linearVelocity.y);
+        }
+
+        if (enemyCollider != null)
+        {
+            enemyCollider.enabled = false;
+        }
+
+        StartCoroutine(DeathRoutine());
     }
 
-    // Stop horizontal movement when falling.
-    private void StopPatrol()
+    private IEnumerator DeathRoutine()
     {
-        // We don't zero out velocity here because Rigidbody2D controls the fall.
-        // We just stop manually moving in Patrol().
+        yield return new WaitForSeconds(deathDelay);
+        Destroy(gameObject);
     }
 }

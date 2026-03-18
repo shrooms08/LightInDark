@@ -1,14 +1,19 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Collections;
 
 // Controls game flow: start, death, pause, restart, level transitions.
-// Submits times to Solana on level complete.
-// Death = full level restart.
+// Offline mode = no blockchain.
+// Speedrun mode = submits final result on level complete.
+// Death = full level restart after a short delay.
 
 public class GameManager : MonoBehaviour
 {
     // === SINGLETON ===
     public static GameManager Instance { get; private set; }
+
+    // === GLOBAL RUN DATA ===
+    public static int DeathCount = 0;
 
     // === SETTINGS ===
 
@@ -19,6 +24,12 @@ public class GameManager : MonoBehaviour
 
     [Header("Level Flow")]
     [SerializeField] private string nextLevelName;
+
+    [Header("Death")]
+    [SerializeField] private float deathRestartDelay = 3f;
+
+    [Header("Competitive")]
+    [SerializeField] private uint seasonId = 0;
 
     // === STATE ===
 
@@ -34,6 +45,7 @@ public class GameManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
+
         Instance = this;
     }
 
@@ -62,7 +74,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // === PUBLIC METHODS ===
+    // === LEVEL FLOW ===
 
     public void StartLevel()
     {
@@ -77,7 +89,7 @@ public class GameManager : MonoBehaviour
 
         if (hud != null)
         {
-            hud.ResetDeaths();
+            hud.SetDeathCount(DeathCount);
         }
 
         SetScreenActive(pauseScreen, false);
@@ -92,18 +104,27 @@ public class GameManager : MonoBehaviour
 
         CurrentState = GameState.Dead;
 
-        if (hud != null)
+        if (runTimer != null)
         {
-            hud.AddDeath();
+            runTimer.PauseTimer();
         }
 
-        RestartLevel();
+        DeathCount++;
+
+        if (hud != null)
+        {
+            hud.SetDeathCount(DeathCount);
+        }
+
+        StartCoroutine(RestartLevelAfterDelay());
     }
 
     public void OnPlayerRespawned()
     {
         CurrentState = GameState.Playing;
     }
+
+    // === LEVEL COMPLETE ===
 
     public async void OnLevelComplete()
     {
@@ -119,26 +140,44 @@ public class GameManager : MonoBehaviour
             runTimer.StopTimer();
         }
 
-        // Submit time to Solana if wallet is connected.
         float completionTime = runTimer != null ? runTimer.CurrentTime : 0f;
         int levelId = MainMenu.SelectedLevel;
 
-        if (SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected())
+        // Only Speedrun mode submits to blockchain.
+        if (MainMenu.IsCompetitiveMode)
         {
-            if (MainMenu.IsCompetitiveMode)
+            if (SolanaManager.Instance != null && SolanaManager.Instance.IsWalletConnected())
             {
-                await SolanaManager.Instance.SubmitCompetitiveTime(levelId, completionTime);
-                Debug.Log("Competitive time submitted: " + completionTime);
+                bool ok = await SolanaManager.Instance.SubmitRunResult(
+                    seasonId,
+                    levelId,
+                    completionTime,
+                    DeathCount
+                );
+
+                if (ok)
+                {
+                    Debug.Log($"Competitive run submitted. Time: {completionTime}, Deaths: {DeathCount}");
+                }
+                else
+                {
+                    Debug.LogWarning("Competitive run submission failed.");
+                }
             }
             else
             {
-                await SolanaManager.Instance.SubmitTime(levelId, completionTime);
-                Debug.Log("Free play time submitted: " + completionTime);
+                Debug.LogWarning("Competitive mode is on, but wallet is not connected or SolanaManager is missing.");
             }
+        }
+        else
+        {
+            Debug.Log($"Offline level complete. Time: {completionTime}, Deaths: {DeathCount}");
         }
 
         LoadNextLevel();
     }
+
+    // === PAUSE ===
 
     public void PauseGame()
     {
@@ -166,11 +205,21 @@ public class GameManager : MonoBehaviour
         SetScreenActive(pauseScreen, false);
     }
 
+    // === RESTART ===
+
+    private IEnumerator RestartLevelAfterDelay()
+    {
+        yield return new WaitForSeconds(deathRestartDelay);
+        RestartLevel();
+    }
+
     public void RestartLevel()
     {
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
+
+    // === LEVEL LOAD ===
 
     public void LoadNextLevel()
     {
@@ -183,11 +232,13 @@ public class GameManager : MonoBehaviour
 
     public void LoadMainMenu()
     {
+        DeathCount = 0;
+        MainMenu.IsCompetitiveMode = false;
         Time.timeScale = 1f;
         SceneManager.LoadScene("Menu");
     }
 
-    // === PRIVATE METHODS ===
+    // === UTIL ===
 
     private void SetScreenActive(GameObject screen, bool active)
     {
